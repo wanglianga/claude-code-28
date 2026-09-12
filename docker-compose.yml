@@ -1,0 +1,37 @@
+# 应用与数据库同处 compose 内部网络；仅应用端口发布到宿主（CC_PUBLISH_PORT）
+services:
+  app:
+    build: .
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgres://art:artclass@db:5432/artclass
+      PUBLIC_DIR: /app/public
+      UPLOAD_DIR: /app/data/uploads
+    ports:
+      - "${CC_PUBLISH_PORT}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - app_data:/app/data
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: art
+      POSTGRES_PASSWORD: artclass
+      POSTGRES_DB: artclass
+    # 不发布到宿主端口，仅供 app 通过服务名 db 访问
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U art -d artclass"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+volumes:
+  app_data:
+  pg_data:

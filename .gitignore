@@ -1,0 +1,84 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+**/*secret*
+**/*credential*
+**/*token*
+**/*password*
+**/*.pem
+**/*.key
+**/*.crt
+**/*connection-string*
+**/*connection_string*
+
+# Dependencies and build output
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+build/
+**/build/
+target/
+**/target/
+coverage/
+**/coverage/
+.vite/
+**/.vite/
+.cache/
+**/.cache/
+.turbo/
+**/.turbo/
+
+# Runtime data, local databases, logs, and temporary files
+data/
+**/data/
+*.db
+*.sqlite
+*.sqlite3
+*.log
+logs/
+**/logs/
+tmp/
+**/tmp/
+temp/
+**/temp/
+
+# Local memory and skill files
+memory/
+**/memory/
+memory.*
+**/memory.*
+skill/
+**/skill/
+skills/
+**/skills/
+
+# Claude Code local state, exported traces, and QA artifacts
+.claude/
+**/.claude/
+*_traces/
+**/*_traces/
+.playwright-cli/
+**/.playwright-cli/
+playwright-report/
+**/playwright-report/
+test-results/
+**/test-results/
+qa/
+**/qa/
+reports/
+**/reports/
+screenshots/
+**/screenshots/
+output/
+**/output/
+
+# Explicit publication constraint
+server/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
