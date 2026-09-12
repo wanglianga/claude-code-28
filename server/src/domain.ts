@@ -42,6 +42,19 @@ export const RISK_LEVELS = [
   { key: 'high', label: '高' },
 ] as const;
 
+/** 比赛辅导计划干预方式（主管） */
+export const ADJUSTMENT_TYPES = [
+  { key: 'extra_lesson', label: '安排加课' },
+  { key: 'change_theme', label: '更换主题' },
+  { key: 'withdraw', label: '建议放弃参赛' },
+] as const;
+
+export const COMPETITION_STATUS = [
+  { key: 'active', label: '辅导中' },
+  { key: 'completed', label: '已完赛' },
+  { key: 'withdrawn', label: '已放弃' },
+] as const;
+
 /** 能力标签（用于老师回复家长时选取证据标签） */
 export const ABILITY_TAGS = [
   '构图稳定', '构图有想法', '线条流畅', '线条果断', '色彩敏感', '配色和谐',

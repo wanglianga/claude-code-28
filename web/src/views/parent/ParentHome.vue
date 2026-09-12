@@ -108,7 +108,11 @@ watch(studentId, loadStudent);
               <span class="chip" :class="latest.need_home_practice ? 'chip-gold' : 'chip-ok'">
                 {{ latest.need_home_practice ? '需要家庭练习' : '本节课无需家庭练习' }}
               </span>
+              <span v-if="latest.serves_competition" class="chip chip-accent" style="margin-left:6px">服务比赛目标</span>
             </div>
+            <p v-if="latest.serves_competition && latest.competition_req_note" class="small muted">
+              本节课解决的比赛要求：{{ latest.competition_req_note }}
+            </p>
             <p v-if="latest.home_practice_note" class="small muted">{{ latest.home_practice_note }}</p>
             <div class="mt">
               <RouterLink to="/parent/questions" class="btn btn-teal btn-sm">对本次点评有疑问？向老师提问</RouterLink>

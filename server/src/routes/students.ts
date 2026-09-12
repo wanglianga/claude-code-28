@@ -74,6 +74,7 @@ studentsRouter.get('/:id/trajectory', h(async (req: Request, res: Response) => {
   const reviews = (await query(
     `SELECT r.id, r.composition, r.line_score, r.color, r.observation, r.creativity, r.focus,
             r.need_home_practice, r.home_practice_note, r.suggestion, r.next_prep, r.class_state,
+            r.serves_competition, r.competition_req_note,
             r.created_at, a.id AS artwork_id, a.title, a.image_path,
             l.id AS lesson_id, l.lesson_date::text AS lesson_date, l.theme, l.stage, l.seq,
             u.name AS teacher_name

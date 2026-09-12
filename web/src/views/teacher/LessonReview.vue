@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, fmtDate } from '../../api';
 import { useAuthStore } from '../../stores/auth';
+import type { Competition } from '../../types';
 
 const route = useRoute();
 const auth = useAuthStore();
@@ -26,6 +27,11 @@ const suggestion = ref('');
 const nextPrep = ref('');
 const classState = ref('');
 
+// 比赛专项辅导
+const activeComps = ref<Competition[]>([]);
+const servesComp = ref(false);
+const compReqNote = ref('');
+
 const dims = computed(() => auth.meta?.dimensions || []);
 
 async function load() {
@@ -40,8 +46,41 @@ async function load() {
 
 onMounted(load);
 
+// 选中学生变化时，加载其在辅导中的比赛与计划项
+watch(studentId, async (sid) => {
+  activeComps.value = [];
+  servesComp.value = false;
+  compReqNote.value = '';
+  if (!sid) return;
+  try {
+    const all = await api<Competition[]>(`/api/students/${sid}/competitions`);
+    activeComps.value = all.filter((c) => c.status === 'active');
+    // 默认勾选：若本节课是该学生比赛计划项对应的课次
+    if (activeComps.value.length) {
+      const hit = activeComps.value[0].items.find((i) => i.lesson_id === lessonId && !i.done);
+      if (hit) {
+        servesComp.value = true;
+        compReqNote.value = hit.requirement;
+      }
+    }
+  } catch {
+    /* 请求中断可忽略 */
+  }
+});
+
 const currentStudent = computed(() =>
   lesson.value?.students.find((s: any) => s.id === studentId.value));
+
+/** 未完成计划项对应的比赛要求，供老师选择本节课解决了哪一项 */
+const reqOptions = computed(() => {
+  const out: Array<{ requirement: string; focus: string; compName: string }> = [];
+  for (const c of activeComps.value) {
+    for (const i of c.items) {
+      if (!i.done) out.push({ requirement: i.requirement, focus: i.focus, compName: c.name });
+    }
+  }
+  return out;
+});
 
 function onFile(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0];
@@ -63,6 +102,10 @@ async function submit() {
   success.value = '';
   if (!studentId.value) { error.value = '请选择学生'; return; }
   if (!suggestion.value.trim()) { error.value = '请填写本次作品的具体建议'; return; }
+  if (servesComp.value && !compReqNote.value.trim()) {
+    error.value = '标记服务比赛目标时，请说明本节课解决了作品的哪个比赛要求';
+    return;
+  }
   submitting.value = true;
   try {
     await api(`/api/classes/lessons/${lessonId}/reviews`, {
@@ -77,12 +120,14 @@ async function submit() {
         suggestion: suggestion.value.trim(),
         next_prep: nextPrep.value.trim(),
         class_state: classState.value.trim(),
+        serves_competition: servesComp.value,
+        competition_req_note: servesComp.value ? compReqNote.value.trim() : '',
       },
     });
     success.value = `已保存 ${currentStudent.value?.name} 的点评`;
     title.value = ''; imageData.value = ''; imageName.value = '';
     suggestion.value = ''; nextPrep.value = ''; classState.value = ''; homeNote.value = '';
-    needHome.value = false;
+    needHome.value = false; servesComp.value = false; compReqNote.value = '';
     scores.value = { composition: 3, line_score: 3, color: 3, observation: 3, creativity: 3, focus: 3 };
     await load();
   } catch (e: any) {
@@ -107,6 +152,10 @@ const attLabel: Record<string, string> = { present: '到课', absent: '缺勤', 
           </div>
         </div>
         <RouterLink to="/teacher" class="btn btn-ghost btn-sm">← 返回班级</RouterLink>
+      </div>
+
+      <div v-if="lesson.prep_focus" class="alert alert-gold mb">
+        <b>本课课次目标（受比赛辅导计划影响）：</b>{{ lesson.prep_focus }}
       </div>
 
       <div class="grid" style="grid-template-columns: 300px 1fr;">
@@ -152,6 +201,28 @@ const attLabel: Record<string, string> = { present: '到课', absent: '缺勤', 
                   <button v-for="n in 5" :key="n" type="button" class="score-btn"
                     :class="{ on: scores[d.key] >= n }" @click="scores[d.key] = n">{{ n }}</button>
                 </div>
+              </div>
+            </div>
+
+            <!-- 比赛专项辅导：本节课是否服务比赛目标 -->
+            <div v-if="activeComps.length" class="comp-box mb">
+              <div v-for="c in activeComps" :key="c.id" class="small mb">
+                <span class="chip chip-accent">比赛辅导中</span>
+                <b>{{ c.name }}</b> · 主题「{{ c.theme }}」 · 截止 {{ fmtDate(c.deadline) }} · {{ c.size_requirement }}
+              </div>
+              <label class="flex" style="gap:8px; cursor:pointer;">
+                <input type="checkbox" v-model="servesComp" />
+                <span><b>本节课服务比赛目标</b></span>
+              </label>
+              <div v-if="servesComp" class="mt">
+                <label class="field" style="margin-bottom:8px">
+                  <span>本节课解决了作品的哪个比赛要求 *（可从计划项选择）</span>
+                  <select class="select" :value="''" @change="(e: any) => e.target.value && (compReqNote = e.target.value)">
+                    <option value="">从辅导计划项中选择...</option>
+                    <option v-for="(o, i) in reqOptions" :key="i" :value="o.requirement">{{ o.requirement }}（{{ o.focus }}）</option>
+                  </select>
+                </label>
+                <input v-model="compReqNote" class="input" placeholder="如：扣题「家乡的桥」——完成主体构图小稿" />
               </div>
             </div>
 
@@ -217,5 +288,11 @@ const attLabel: Record<string, string> = { present: '到课', absent: '缺勤', 
   color: var(--ink-soft);
 }
 .score-btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.comp-box {
+  border: 1.5px dashed var(--accent);
+  background: #fdf1ea;
+  border-radius: 12px;
+  padding: 12px 14px;
+}
 @media (max-width: 900px) { .score-grid { grid-template-columns: 1fr; } }
 </style>

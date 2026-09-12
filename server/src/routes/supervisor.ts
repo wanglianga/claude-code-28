@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
-import { h } from "../hwrap";
 import { query } from '../db';
 import { authed, requireRole } from '../auth';
+import { h } from '../hwrap';
+import { planProgress } from '../competition';
 
 export const supervisorRouter = Router();
 supervisorRouter.use(h(authed), requireRole('supervisor'));
@@ -66,6 +67,15 @@ supervisorRouter.get('/overview', h(async (_req: Request, res: Response) => {
       `SELECT type, count(*)::int AS c FROM events WHERE student_id=$1 GROUP BY type`, [s.id])).rows;
     const hasRefund = events.some((e: any) => e.type === 'refund_request');
 
+    // 比赛辅导进度
+    const activeComps = (await query(
+      `SELECT id, name FROM competitions WHERE student_id=$1 AND status='active'`, [s.id])).rows;
+    let compBehind = false;
+    for (const c of activeComps) {
+      const p = await planProgress(c.id);
+      if (p.behind) { compBehind = true; break; }
+    }
+
     // 一致性检查
     const flags: Array<{ level: 'warn' | 'danger' | 'ok'; text: string }> = [];
     const latestEval = evals[0];
@@ -75,6 +85,7 @@ supervisorRouter.get('/overview', h(async (_req: Request, res: Response) => {
     if (riskLabel === 'medium') flags.push({ level: 'warn', text: '家长沟通风险中' });
     if (remaining <= 8) flags.push({ level: 'warn', text: `课时仅剩${remaining}节` });
     if (trend !== null && trend < 0.3 && n >= 6) flags.push({ level: 'warn', text: '阶段进步幅度偏小' });
+    if (compBehind) flags.push({ level: 'warn', text: '比赛辅导进度落后' });
     if (latestEval && renewals.length) {
       if (['stay', 'interest', 'one_on_one'].includes(latestEval.decision)) {
         flags.push({ level: 'warn', text: '续费建议与评估结论（非升班）需向家长解释清楚' });
@@ -102,6 +113,7 @@ supervisorRouter.get('/overview', h(async (_req: Request, res: Response) => {
       latest_eval: latestEval || null,
       renewal_count: renewals.length,
       latest_renewal: renewals[0] || null,
+      active_competitions: activeComps.length,
       flags,
     });
   }

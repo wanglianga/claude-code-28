@@ -80,10 +80,24 @@ classesRouter.post('/lessons/:lessonId/reviews', requireRole('teacher'), h(async
     return;
   }
   const { student_id, title, image_data, scores, need_home_practice,
-    home_practice_note, suggestion, next_prep, class_state } = req.body || {};
+    home_practice_note, suggestion, next_prep, class_state,
+    serves_competition, competition_req_note } = req.body || {};
   if (!student_id || !scores || !suggestion) {
     res.status(400).json({ error: '学生、六维评分与点评建议为必填项' });
     return;
+  }
+  // 标记"服务比赛目标"时必须说明本节课解决了哪个比赛要求，且学生须有在辅导中的比赛
+  if (serves_competition) {
+    if (!competition_req_note || !String(competition_req_note).trim()) {
+      res.status(400).json({ error: '标记服务比赛目标时，必须说明本节课解决了作品的哪个比赛要求' });
+      return;
+    }
+    const active = await query(
+      `SELECT 1 FROM competitions WHERE student_id=$1 AND status='active'`, [student_id]);
+    if (!active.rows.length) {
+      res.status(400).json({ error: '该学生没有在辅导中的比赛，不能标记服务比赛目标' });
+      return;
+    }
   }
   for (const d of DIMENSIONS) {
     const v = (scores as any)[d.key];
@@ -120,11 +134,13 @@ classesRouter.post('/lessons/:lessonId/reviews', requireRole('teacher'), h(async
     const rev = await client.query(
       `INSERT INTO reviews (artwork_id, student_id, lesson_id, teacher_id,
          composition, line_score, color, observation, creativity, focus,
-         need_home_practice, home_practice_note, suggestion, next_prep, class_state)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`,
+         need_home_practice, home_practice_note, suggestion, next_prep, class_state,
+         serves_competition, competition_req_note)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
       [art.rows[0].id, student_id, lessonId, req.user!.id,
        scores.composition, scores.line_score, scores.color, scores.observation, scores.creativity, scores.focus,
-       !!need_home_practice, home_practice_note || '', suggestion, next_prep || '', class_state || '']);
+       !!need_home_practice, home_practice_note || '', suggestion, next_prep || '', class_state || '',
+       !!serves_competition, String(competition_req_note || '').trim()]);
     await client.query(
       `INSERT INTO attendance (student_id, lesson_id, status) VALUES ($1,$2,'present')
        ON CONFLICT (student_id, lesson_id) DO NOTHING`,

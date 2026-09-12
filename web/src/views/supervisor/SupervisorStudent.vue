@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, fmtDate, fmtDateTime } from '../../api';
 import { useAuthStore } from '../../stores/auth';
-import type { PromotionData, StageReport, Timeline, Renewal } from '../../types';
+import type { Competition, PromotionData, StageReport, Timeline, Renewal } from '../../types';
 import GrowthPanel from '../../components/GrowthPanel.vue';
 import RadarChart from '../../components/RadarChart.vue';
 
@@ -11,13 +11,14 @@ const route = useRoute();
 const auth = useAuthStore();
 const studentId = Number(route.params.id);
 
-const tab = ref<'growth' | 'eval' | 'timeline' | 'report' | 'biz'>('growth');
+const tab = ref<'growth' | 'eval' | 'timeline' | 'report' | 'biz' | 'comp'>('growth');
 const student = ref<any>(null);
 const promo = ref<PromotionData | null>(null);
 const timeline = ref<Timeline | null>(null);
 const reports = ref<StageReport[]>([]);
 const renewals = ref<Renewal[]>([]);
 const evaluations = ref<any[]>([]);
+const competitions = ref<Competition[]>([]);
 const error = ref('');
 const notice = ref('');
 
@@ -37,6 +38,23 @@ const newRenewal = ref({ suggestion: '', package: '' });
 const reportPeriod = ref('2026年秋季阶段');
 const activeReport = ref<StageReport | null>(null);
 
+// 比赛专项辅导
+const newComp = ref({ name: '', theme: '', deadline: '', size_requirement: '' });
+const adjustForm = ref<{ compId: number | null; type: string; note: string; lesson_date: string; new_theme: string }>({
+  compId: null, type: '', note: '', lesson_date: '', new_theme: '',
+});
+
+const compStatusLabel = computed(() => {
+  const map: Record<string, string> = {};
+  (auth.meta?.competitionStatus || []).forEach((s) => { map[s.key] = s.label; });
+  return (k: string) => map[k] || k;
+});
+const adjustTypeLabel = computed(() => {
+  const map: Record<string, string> = {};
+  (auth.meta?.adjustmentTypes || []).forEach((t) => { map[t.key] = t.label; });
+  return (k: string) => map[k] || k;
+});
+
 const decisionLabel = computed(() => {
   const map: Record<string, string> = {};
   (auth.meta?.decisions || []).forEach((d) => { map[d.key] = d.label; });
@@ -51,7 +69,7 @@ const eventLabel = computed(() => {
 async function loadAll() {
   error.value = '';
   try {
-    [student.value, promo.value, timeline.value, reports.value, renewals.value, evaluations.value] =
+    [student.value, promo.value, timeline.value, reports.value, renewals.value, evaluations.value, competitions.value] =
       await Promise.all([
         api(`/api/students/${studentId}`),
         api(`/api/students/${studentId}/promotion-data`),
@@ -59,6 +77,7 @@ async function loadAll() {
         api(`/api/students/${studentId}/stage-reports`),
         api(`/api/students/${studentId}/renewals`),
         api(`/api/students/${studentId}/evaluations`),
+        api(`/api/students/${studentId}/competitions`),
       ]);
     // 预填评估表单
     if (promo.value) {
@@ -145,6 +164,56 @@ async function genReport() {
   activeReport.value = reports.value[0];
 }
 
+// ---------- 比赛专项辅导 ----------
+async function addCompetition() {
+  error.value = '';
+  if (!newComp.value.name.trim() || !newComp.value.theme.trim() || !newComp.value.deadline) {
+    error.value = '请填写比赛名称、主题与截止时间';
+    return;
+  }
+  try {
+    await api(`/api/students/${studentId}/competitions`, { method: 'POST', body: newComp.value });
+    newComp.value = { name: '', theme: '', deadline: '', size_requirement: '' };
+    notice.value = '已报名比赛，并依据比赛要求与当前能力标签生成辅导计划（已同步到后续课次目标）';
+    await loadAll();
+  } catch (e: any) {
+    error.value = e.message;
+  }
+}
+
+function openAdjust(compId: number, type: string) {
+  adjustForm.value = { compId, type, note: '', lesson_date: '', new_theme: '' };
+}
+
+async function submitAdjustment() {
+  error.value = '';
+  const f = adjustForm.value;
+  if (!f.compId || !f.type) return;
+  if (f.type === 'extra_lesson' && !f.lesson_date) { error.value = '加课需要选择日期'; return; }
+  if (f.type === 'change_theme' && !f.new_theme.trim()) { error.value = '请填写新主题'; return; }
+  try {
+    await api(`/api/competitions/${f.compId}/adjustments`, {
+      method: 'POST',
+      body: { type: f.type, note: f.note, lesson_date: f.lesson_date || undefined, new_theme: f.new_theme || undefined },
+    });
+    notice.value = `已执行干预：${adjustTypeLabel.value(f.type)}`;
+    adjustForm.value = { compId: null, type: '', note: '', lesson_date: '', new_theme: '' };
+    await loadAll();
+  } catch (e: any) {
+    error.value = e.message;
+  }
+}
+
+async function completeComp(compId: number) {
+  try {
+    await api(`/api/competitions/${compId}/complete`, { method: 'POST', body: {} });
+    notice.value = '已标记完赛';
+    await loadAll();
+  } catch (e: any) {
+    error.value = e.message;
+  }
+}
+
 interface TlEntry { d: string; kind: string; label: string; detail: string; cls: string }
 const tlEntries = computed<TlEntry[]>(() => {
   if (!timeline.value) return [];
@@ -203,6 +272,9 @@ const doPrint = () => window.print();
       <div class="tabs">
         <button class="tab" :class="{ active: tab === 'growth' }" @click="tab = 'growth'">成长轨迹</button>
         <button class="tab" :class="{ active: tab === 'eval' }" @click="tab = 'eval'">升班评估</button>
+        <button class="tab" :class="{ active: tab === 'comp' }" @click="tab = 'comp'">
+          比赛辅导<span v-if="competitions.some(c => c.status === 'active' && c.progress.behind)" class="chip chip-gold" style="margin-left:4px">落后</span>
+        </button>
         <button class="tab" :class="{ active: tab === 'timeline' }" @click="tab = 'timeline'">事件时间线</button>
         <button class="tab" :class="{ active: tab === 'report' }" @click="tab = 'report'">阶段说明</button>
         <button class="tab" :class="{ active: tab === 'biz' }" @click="tab = 'biz'">续费与沟通风险</button>
@@ -291,6 +363,110 @@ const doPrint = () => window.print();
                 <span class="faint small">{{ e.supervisor_name }} · {{ fmtDate(e.created_at) }}</span>
               </div>
               <div class="small muted" style="margin-top:6px">{{ e.rationale }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 比赛专项辅导 -->
+      <div v-if="tab === 'comp'">
+        <div class="card">
+          <h3>报名新比赛</h3>
+          <div class="grid grid-2">
+            <label class="field"><span>比赛名称 *</span>
+              <input v-model="newComp.name" class="input" placeholder="如：第十二届「童画杯」全国少儿美术大赛" /></label>
+            <label class="field"><span>比赛主题 *</span>
+              <input v-model="newComp.theme" class="input" placeholder="如：《家乡的桥》" /></label>
+            <label class="field"><span>截止时间 *</span>
+              <input v-model="newComp.deadline" type="date" class="input" /></label>
+            <label class="field"><span>尺寸要求</span>
+              <input v-model="newComp.size_requirement" class="input" placeholder="如：四开竖构图（389×546mm），水粉或综合材料" /></label>
+          </div>
+          <button class="btn btn-accent" @click="addCompetition">报名并生成辅导计划</button>
+          <div class="small faint mt">报名后系统将把比赛主题、截止时间、尺寸要求与该生当前能力标签（六维弱项）转成辅导计划，并同步到后续课次目标。</div>
+        </div>
+
+        <div v-if="!competitions.length" class="empty">暂无比赛记录</div>
+        <div v-for="c in competitions" :key="c.id" class="card">
+          <div class="flex-between flex-wrap">
+            <div class="flex flex-wrap">
+              <b>{{ c.name }}</b>
+              <span class="chip" :class="c.status === 'active' ? 'chip-accent' : c.status === 'completed' ? 'chip-ok' : ''">
+                {{ compStatusLabel(c.status) }}
+              </span>
+              <span v-if="c.status === 'active' && c.progress.behind" class="chip chip-danger">进度落后</span>
+            </div>
+            <span class="faint small">{{ c.created_by_name }} 报名 · {{ fmtDate(c.created_at) }}</span>
+          </div>
+          <div class="small muted mt">
+            主题「{{ c.theme }}」 · 截止 {{ fmtDate(c.deadline) }} · {{ c.size_requirement || '尺寸不限' }}
+            <template v-if="c.ability_snapshot"> · 生成计划时能力弱项：
+              <span v-for="w in c.ability_snapshot.weak" :key="w" class="chip chip-gold" style="margin-left:4px">{{ w }}</span>
+            </template>
+          </div>
+
+          <!-- 进度条 -->
+          <div class="progress-wrap mt mb">
+            <div class="progress-bar">
+              <div class="progress-fill" :class="{ behind: c.progress.behind }" :style="{ width: c.progress.percent + '%' }"></div>
+            </div>
+            <span class="small muted">计划项完成 {{ c.progress.done }}/{{ c.items.filter(i => i.lesson_id).length }}（到今日应完成 {{ c.progress.expected }}）</span>
+          </div>
+
+          <!-- 辅导计划项 -->
+          <table class="table">
+            <thead><tr><th style="width:46px">阶段</th><th style="width:110px">课次</th><th>辅导重点（已写入课次目标）</th><th>对应比赛要求</th><th style="width:80px">完成</th></tr></thead>
+            <tbody>
+              <tr v-for="i in c.items" :key="i.seq">
+                <td>{{ i.seq }}</td>
+                <td class="muted">{{ i.lesson_date || '待排课' }}</td>
+                <td>{{ i.focus }}</td>
+                <td>{{ i.requirement }}</td>
+                <td>
+                  <span v-if="i.done" class="chip chip-ok">✓ 已达成</span>
+                  <span v-else-if="i.lesson_date && i.lesson_date <= new Date().toISOString().slice(0,10)" class="chip chip-danger">未完成</span>
+                  <span v-else class="chip">未到课</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <!-- 干预操作 -->
+          <div v-if="c.status === 'active'" class="flex flex-wrap mt">
+            <button class="btn btn-teal btn-sm" @click="openAdjust(c.id, 'extra_lesson')">安排加课</button>
+            <button class="btn btn-ghost btn-sm" @click="openAdjust(c.id, 'change_theme')">更换主题</button>
+            <button class="btn btn-ghost btn-sm" style="color:var(--danger)" @click="openAdjust(c.id, 'withdraw')">建议放弃参赛</button>
+            <button class="btn btn-ghost btn-sm" @click="completeComp(c.id)">标记完赛</button>
+          </div>
+          <div v-if="adjustForm.compId === c.id" class="adjust-box mt">
+            <h4 style="margin:0 0 10px">{{ adjustTypeLabel(adjustForm.type) }}</h4>
+            <div class="grid grid-2">
+              <label v-if="adjustForm.type === 'extra_lesson'" class="field">
+                <span>加课日期 *</span>
+                <input v-model="adjustForm.lesson_date" type="date" class="input" />
+              </label>
+              <label v-if="adjustForm.type === 'change_theme'" class="field">
+                <span>新主题 *</span>
+                <input v-model="adjustForm.new_theme" class="input" placeholder="如：《家乡的桥》→《老街记忆》" />
+              </label>
+              <label class="field">
+                <span>说明{{ adjustForm.type === 'extra_lesson' ? '（留空则取下一个未完成计划项）' : '' }}</span>
+                <input v-model="adjustForm.note" class="input" />
+              </label>
+            </div>
+            <div class="flex">
+              <button class="btn btn-accent btn-sm" @click="submitAdjustment">确认执行</button>
+              <button class="btn btn-ghost btn-sm" @click="adjustForm.compId = null">取消</button>
+            </div>
+          </div>
+
+          <!-- 干预历史 -->
+          <div v-if="c.adjustments.length" class="mt">
+            <div class="small muted mb">干预记录：</div>
+            <div v-for="a in c.adjustments" :key="a.id" class="small mb">
+              <span class="chip chip-gold">{{ adjustTypeLabel(a.type) }}</span>
+              {{ a.note || '—' }}
+              <span class="faint">（{{ a.operator_name }} · {{ fmtDateTime(a.created_at) }}）</span>
             </div>
           </div>
         </div>
@@ -428,3 +604,22 @@ const doPrint = () => window.print();
     </div>
   </div>
 </template>
+
+<style scoped>
+.progress-wrap { display: flex; align-items: center; gap: 12px; }
+.progress-bar {
+  flex: 0 0 220px;
+  height: 10px;
+  background: #eee6d8;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.progress-fill { height: 100%; background: var(--teal); border-radius: 999px; }
+.progress-fill.behind { background: var(--danger); }
+.adjust-box {
+  border: 1.5px dashed var(--line);
+  border-radius: 12px;
+  padding: 14px;
+  background: #fffdf7;
+}
+</style>

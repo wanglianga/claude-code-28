@@ -184,7 +184,11 @@ const radarLabels = computed(() => dims.value.map((d) => d.label));
               <div class="chip" :class="active.need_home_practice ? 'chip-gold' : 'chip-ok'">
                 {{ active.need_home_practice ? '需要家庭练习' : '本节课无需家庭练习' }}
               </div>
+              <div v-if="active.serves_competition" class="chip chip-accent" style="margin-left:6px">服务比赛目标</div>
             </div>
+            <p v-if="active.serves_competition && active.competition_req_note" class="small muted mt">
+              本节课解决的比赛要求：{{ active.competition_req_note }}
+            </p>
             <div class="mt small">
               <p><b>老师建议：</b>{{ active.suggestion }}</p>
               <p v-if="active.next_prep"><b>下次课准备：</b>{{ active.next_prep }}</p>

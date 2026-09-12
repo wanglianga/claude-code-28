@@ -8,7 +8,7 @@ interface ClassInfo {
 }
 interface ClassDetail extends ClassInfo {
   students: Array<{ id: number; name: string; review_count: number; hours_consumed: number; hours_purchased: number }>;
-  lessons: Array<{ id: number; lesson_date: string; theme: string; stage: string; seq: number; review_count: number }>;
+  lessons: Array<{ id: number; lesson_date: string; theme: string; stage: string; seq: number; review_count: number; prep_focus: string }>;
 }
 
 const classes = ref<ClassInfo[]>([]);
@@ -84,7 +84,10 @@ onMounted(loadClasses);
             <tbody>
               <tr v-for="l in detail.lessons" :key="l.id">
                 <td class="muted">{{ fmtDate(l.lesson_date) }}</td>
-                <td>{{ l.theme }}</td>
+                <td>
+                  {{ l.theme }}
+                  <div v-if="l.prep_focus" class="small" style="color:var(--warn)">🎯 {{ l.prep_focus }}</div>
+                </td>
                 <td><span class="chip chip-teal">{{ l.stage }}</span></td>
                 <td>
                   <span class="chip" :class="l.review_count >= detail.students.length ? 'chip-ok' : 'chip-gold'">

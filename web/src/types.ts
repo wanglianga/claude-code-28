@@ -19,6 +19,8 @@ export interface Meta {
   cooperation: string[];
   riskLevels: MetaOption[];
   abilityTags: string[];
+  adjustmentTypes: MetaOption[];
+  competitionStatus: MetaOption[];
 }
 
 export interface StudentSummary {
@@ -50,6 +52,8 @@ export interface ReviewItem {
   suggestion: string;
   next_prep: string;
   class_state: string;
+  serves_competition: boolean;
+  competition_req_note: string;
   artwork_id: number;
   title: string;
   image_path: string;
@@ -172,4 +176,38 @@ export interface StageReport {
   content: string;
   created_at: string;
   generated_by_name: string;
+}
+
+/** 比赛辅导计划项 */
+export interface PlanItem {
+  seq: number;
+  focus: string;
+  requirement: string;
+  lesson_id: number | null;
+  lesson_date: string | null;
+  done?: boolean;
+}
+
+export interface PlanAdjustment {
+  id: number;
+  type: 'extra_lesson' | 'change_theme' | 'withdraw';
+  note: string;
+  created_at: string;
+  operator_name: string;
+}
+
+export interface Competition {
+  id: number;
+  student_id: number;
+  name: string;
+  theme: string;
+  deadline: string;
+  size_requirement: string;
+  status: 'active' | 'completed' | 'withdrawn';
+  created_at: string;
+  created_by_name: string;
+  items: PlanItem[];
+  ability_snapshot: { avgs: Record<string, number>; weak: string[] } | null;
+  progress: { expected: number; done: number; behind: boolean; percent: number };
+  adjustments: PlanAdjustment[];
 }

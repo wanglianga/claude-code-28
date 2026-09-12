@@ -9,7 +9,8 @@ import { studentsRouter } from './routes/students';
 import { classesRouter } from './routes/classes';
 import { questionsRouter } from './routes/questions';
 import { supervisorRouter } from './routes/supervisor';
-import { DIMENSIONS, QUESTION_TYPES, EVENT_TYPES, DECISIONS, WILLINGNESS, COOPERATION, RISK_LEVELS, ABILITY_TAGS } from './domain';
+import { competitionsRouter } from './routes/competitions';
+import { DIMENSIONS, QUESTION_TYPES, EVENT_TYPES, DECISIONS, WILLINGNESS, COOPERATION, RISK_LEVELS, ABILITY_TAGS, ADJUSTMENT_TYPES, COMPETITION_STATUS } from './domain';
 
 const app = express();
 app.use(express.json({ limit: '12mb' }));
@@ -32,6 +33,8 @@ app.get('/api/meta', authed, (_req, res) => {
     cooperation: COOPERATION,
     riskLevels: RISK_LEVELS,
     abilityTags: ABILITY_TAGS,
+    adjustmentTypes: ADJUSTMENT_TYPES,
+    competitionStatus: COMPETITION_STATUS,
   });
 });
 
@@ -39,6 +42,7 @@ app.use('/api/students', studentsRouter);
 app.use('/api/classes', classesRouter);
 app.use('/api/questions', questionsRouter);
 app.use('/api/supervisor', supervisorRouter);
+app.use('/api', competitionsRouter);
 
 // 作品图片
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });

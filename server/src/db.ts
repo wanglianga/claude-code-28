@@ -209,6 +209,35 @@ CREATE TABLE IF NOT EXISTS stage_reports (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS competitions (
+  id SERIAL PRIMARY KEY,
+  student_id INT NOT NULL REFERENCES students(id),
+  name TEXT NOT NULL,
+  theme TEXT NOT NULL,
+  deadline DATE NOT NULL,
+  size_requirement TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'active',   -- active / completed / withdrawn
+  created_by INT REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS coaching_plans (
+  id SERIAL PRIMARY KEY,
+  competition_id INT NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
+  items JSONB NOT NULL DEFAULT '[]',        -- [{seq, focus, requirement, lesson_id, lesson_date}]
+  ability_snapshot JSONB NOT NULL DEFAULT '{}',  -- 生成时的六维均分与弱项
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS plan_adjustments (
+  id SERIAL PRIMARY KEY,
+  competition_id INT NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,                       -- extra_lesson / change_theme / withdraw
+  note TEXT NOT NULL DEFAULT '',
+  created_by INT REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE INDEX IF NOT EXISTS idx_reviews_student ON reviews(student_id);
 CREATE INDEX IF NOT EXISTS idx_artworks_student ON artworks(student_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_student ON attendance(student_id);
@@ -218,6 +247,12 @@ CREATE INDEX IF NOT EXISTS idx_events_student ON events(student_id);
 
 export async function initSchema(): Promise<void> {
   await pool.query(SCHEMA);
+  // 幂等列升级（兼容已存在的库）
+  await pool.query(`
+    ALTER TABLE reviews ADD COLUMN IF NOT EXISTS serves_competition BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE reviews ADD COLUMN IF NOT EXISTS competition_req_note TEXT NOT NULL DEFAULT '';
+    ALTER TABLE lessons ADD COLUMN IF NOT EXISTS prep_focus TEXT NOT NULL DEFAULT '';
+  `);
 }
 
 export async function withTransaction<T>(

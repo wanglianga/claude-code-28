@@ -95,6 +95,33 @@ const LESSON_DATES = [
   '2026-08-01', '2026-08-08', '2026-08-15', '2026-08-22', '2026-08-29', '2026-09-05',
 ];
 
+/** 未来课次（今天起），用于承接比赛辅导计划等后续教学安排 */
+const FUTURE_DATES = ['2026-09-12', '2026-09-19', '2026-09-26', '2026-10-03', '2026-10-10'];
+
+const FUTURE_THEMES: Record<string, LessonDef[]> = {
+  '启蒙A班': [
+    { theme: '《秋天的颜色》色彩涂鸦', stage: '色彩感知' },
+    { theme: '《小动物写生》观察练习', stage: '观察启蒙' },
+    { theme: '《我的机器人》想象画', stage: '创意表达' },
+    { theme: '《丰收的果园》构图练习', stage: '造型基础' },
+    { theme: '《国庆主题画》综合创作', stage: '综合创作' },
+  ],
+  '基础B班': [
+    { theme: '《秋色写生》色彩练习', stage: '色彩感知' },
+    { theme: '《线条的韵律》线条表现', stage: '造型基础' },
+    { theme: '《立体构成启蒙》', stage: '造型基础' },
+    { theme: '《主题创作》综合练习', stage: '综合创作' },
+    { theme: '《作品讲评与修改》', stage: '综合创作' },
+  ],
+  '提高C班': [
+    { theme: '《素描·石膏五官》', stage: '造型基础' },
+    { theme: '《色彩风景·秋》', stage: '色彩表现' },
+    { theme: '《速写·场景组合》', stage: '造型基础' },
+    { theme: '《主题创作》', stage: '综合创作' },
+    { theme: '《作品集点评》', stage: '综合创作' },
+  ],
+};
+
 interface LessonDef { theme: string; stage: string; }
 
 const THEMES: Record<string, LessonDef[]> = {
@@ -305,15 +332,17 @@ export async function seedIfEmpty(): Promise<void> {
       [ageGroup, dim, target, desc]);
   }
 
-  // 课程（每班12节）
+  // 课程（每班12节已上 + 5节未来课次）
   const lessonIds: Record<string, number[]> = {};
   for (const [className, defs] of Object.entries(THEMES)) {
     lessonIds[className] = [];
     const tUser = classDefs.find((c) => c[0] === className)![3];
-    for (let i = 0; i < defs.length; i++) {
+    const allDefs = [...defs, ...FUTURE_THEMES[className]];
+    const allDates = [...LESSON_DATES, ...FUTURE_DATES];
+    for (let i = 0; i < allDefs.length; i++) {
       const r = await query(
         'INSERT INTO lessons (class_id, teacher_id, lesson_date, theme, stage, seq) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
-        [classIds[className], teacherIds[tUser], LESSON_DATES[i], defs[i].theme, defs[i].stage, i + 1]);
+        [classIds[className], teacherIds[tUser], allDates[i], allDefs[i].theme, allDefs[i].stage, i + 1]);
       lessonIds[className].push(r.rows[0].id);
     }
   }
@@ -336,7 +365,7 @@ export async function seedIfEmpty(): Promise<void> {
 
     const rand = mulberry32(studentId * 1000 + 7);
     const lessons = lessonIds[className];
-    for (let li = 0; li < lessons.length; li++) {
+    for (let li = 0; li < LESSON_DATES.length; li++) {  // 仅为已上的12节课生成出勤/作品/点评
       const lessonId = lessons[li];
       const isAbsent = st.absentLessons.includes(li);
       const isMakeup = st.makeupLessons.includes(li);
@@ -489,6 +518,60 @@ export async function seedIfEmpty(): Promise<void> {
      '赵铭老师：苏晴本阶段全勤，六维能力均稳定达到提高班目标，结构素描与色彩静物完成度高，具备升入素描进阶班的能力基础。',
      JSON.stringify(goalComparison),
      '综合同龄段目标达成度（6/6项达标）、全勤出勤、作业全部完成、家长积极配合且孩子升班意愿强烈，建议升入素描进阶班，并配套前4周衔接课程。']);
+
+  // ============ 比赛专项辅导 ============
+  // 陈小明：辅导中的比赛（进度落后 1 项，供主管演示加课/换主题/放弃干预）
+  const bLessons = lessonIds['基础B班']; // 索引10=第11课(08-29) ... 索引15=第16课(10-03)
+  const comp1 = await query(
+    `INSERT INTO competitions (student_id, name, theme, deadline, size_requirement, status, created_by, created_at)
+     VALUES ($1,'第十二届「童画杯」全国少儿美术大赛','《家乡的桥》','2026-10-17','四开竖构图（389×546mm），水粉或综合材料','active',$2,'2026-08-20 10:00') RETURNING id`,
+    [sid('陈小明'), supId]);
+  const comp1Id = comp1.rows[0].id as number;
+  const comp1Items = [
+    { seq: 1, focus: '主题构思与素材：围绕「《家乡的桥》」收集素材、起2-3幅小稿', requirement: '扣题「《家乡的桥》」', lesson_id: bLessons[10], lesson_date: '2026-08-29' },
+    { seq: 2, focus: '构图与尺寸适配：按「四开竖构图（389×546mm）」确定画面比例', requirement: '尺寸要求：四开竖构图（389×546mm）', lesson_id: bLessons[11], lesson_date: '2026-09-05' },
+    { seq: 3, focus: '观察能力专项强化：桥体结构写生与细节刻画', requirement: '能力提升：观察能力', lesson_id: bLessons[12], lesson_date: '2026-09-12' },
+    { seq: 4, focus: '构图专项强化：竖构图中的主次关系与留白', requirement: '能力提升：构图', lesson_id: bLessons[13], lesson_date: '2026-09-19' },
+    { seq: 5, focus: '正稿制作：按比赛要求完成完整参赛作品', requirement: '完成参赛作品正稿', lesson_id: bLessons[14], lesson_date: '2026-09-26' },
+    { seq: 6, focus: '修改完善与提交：对照比赛要求逐项检查，截止（2026-10-17）前完成提交', requirement: '按要求完成提交', lesson_id: bLessons[15], lesson_date: '2026-10-03' },
+  ];
+  await query(
+    'INSERT INTO coaching_plans (competition_id, items, ability_snapshot) VALUES ($1,$2,$3)',
+    [comp1Id, JSON.stringify(comp1Items),
+     JSON.stringify({ avgs: { composition: 3.1, line_score: 3.4, color: 3.4, observation: 3.0, creativity: 3.2, focus: 3.1 }, weak: ['观察能力', '构图'] })]);
+  for (const item of comp1Items) {
+    await query('UPDATE lessons SET prep_focus=$1 WHERE id=$2', [item.focus, item.lesson_id]);
+  }
+  // 第11课点评标记服务比赛目标；第12课未标记 → 进度落后
+  await query(
+    `UPDATE reviews SET serves_competition=true, competition_req_note=$1
+     WHERE student_id=$2 AND lesson_id=$3`,
+    ['扣题「《家乡的桥》」：完成素材小稿2幅，确定以村口老石桥为画面主体', sid('陈小明'), bLessons[10]]);
+  await query(
+    `INSERT INTO events (student_id, type, title, detail, created_by, created_at) VALUES
+     ($1,'competition','报名比赛并生成辅导计划','报名「童画杯」，主题《家乡的桥》，截止2026-10-17，已按当前能力标签（弱项：观察能力、构图）生成6阶段辅导计划并同步到后续课次目标。',$2,'2026-08-20 10:05')`,
+    [sid('陈小明'), supId]);
+
+  // 张子涵：已完赛的比赛（历史记录）
+  const cLessons = lessonIds['提高C班'];
+  const comp2 = await query(
+    `INSERT INTO competitions (student_id, name, theme, deadline, size_requirement, status, created_by, created_at)
+     VALUES ($1,'第九届「星光杯」少儿美术大赛','《黄昏的街道》','2026-08-18','四开（389×546mm），材料不限','completed',$2,'2026-07-01 10:00') RETURNING id`,
+    [sid('张子涵'), supId]);
+  const comp2Items = [
+    { seq: 1, focus: '主题构思：黄昏光影素材收集与小稿', requirement: '扣题「《黄昏的街道》」', lesson_id: cLessons[6], lesson_date: '2026-08-01' },
+    { seq: 2, focus: '正稿制作与提交', requirement: '完成参赛作品正稿并提交', lesson_id: cLessons[7], lesson_date: '2026-08-08' },
+  ];
+  await query(
+    'INSERT INTO coaching_plans (competition_id, items, ability_snapshot) VALUES ($1,$2,$3)',
+    [comp2.rows[0].id, JSON.stringify(comp2Items),
+     JSON.stringify({ avgs: { composition: 3.8, line_score: 3.9, color: 3.8, observation: 3.8, creativity: 3.9, focus: 3.9 }, weak: ['色彩', '构图'] })]);
+  await query(
+    `UPDATE reviews SET serves_competition=true, competition_req_note=$1 WHERE student_id=$2 AND lesson_id=$3`,
+    ['扣题「《黄昏的街道》」：完成3幅黄昏街景小稿并选定最终构图', sid('张子涵'), cLessons[6]]);
+  await query(
+    `UPDATE reviews SET serves_competition=true, competition_req_note=$1 WHERE student_id=$2 AND lesson_id=$3`,
+    ['完成参赛作品正稿：按四开尺寸完成《黄昏的街道》水粉正稿', sid('张子涵'), cLessons[7]]);
 
   console.log('种子数据初始化完成');
 }
