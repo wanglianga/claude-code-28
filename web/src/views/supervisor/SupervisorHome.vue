@@ -13,8 +13,13 @@ const classFilter = ref('');
 const riskOnly = ref(false);
 
 onMounted(async () => {
-  rows.value = await api('/api/supervisor/overview');
-  loading.value = false;
+  try {
+    rows.value = await api('/api/supervisor/overview');
+  } catch {
+    /* 请求中断可忽略 */
+  } finally {
+    loading.value = false;
+  }
 });
 
 const classNames = computed(() => [...new Set(rows.value.map((r) => r.class_name))]);

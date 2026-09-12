@@ -17,15 +17,24 @@ const pendingCount = ref(0);
 const loading = ref(true);
 
 async function loadClasses() {
-  classes.value = await api('/api/classes');
-  if (classes.value.length) selectClass(classes.value[0].id);
-  const qs = await api<any[]>('/api/questions');
-  pendingCount.value = qs.filter((q) => q.status === 'pending').length;
-  loading.value = false;
+  try {
+    classes.value = await api('/api/classes');
+    if (classes.value.length) await selectClass(classes.value[0].id);
+    const qs = await api<any[]>('/api/questions');
+    pendingCount.value = qs.filter((q) => q.status === 'pending').length;
+  } catch {
+    /* 页面快速切换导致请求中断时忽略，避免未捕获异常 */
+  } finally {
+    loading.value = false;
+  }
 }
 
 async function selectClass(id: number) {
-  detail.value = await api(`/api/classes/${id}`);
+  try {
+    detail.value = await api(`/api/classes/${id}`);
+  } catch {
+    /* 请求中断可忽略 */
+  }
 }
 
 onMounted(loadClasses);

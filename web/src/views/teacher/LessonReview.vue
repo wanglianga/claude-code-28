@@ -29,9 +29,13 @@ const classState = ref('');
 const dims = computed(() => auth.meta?.dimensions || []);
 
 async function load() {
-  lesson.value = await api(`/api/classes/lessons/${lessonId}`);
-  const next = lesson.value.students.find((s: any) => !s.review_id && s.attendance !== 'absent');
-  studentId.value = next ? next.id : null;
+  try {
+    lesson.value = await api(`/api/classes/lessons/${lessonId}`);
+    const next = lesson.value.students.find((s: any) => !s.review_id && s.attendance !== 'absent');
+    studentId.value = next ? next.id : null;
+  } catch {
+    /* 请求中断可忽略 */
+  }
 }
 
 onMounted(load);

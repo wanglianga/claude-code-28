@@ -24,8 +24,13 @@ const typeLabel = computed(() => {
 
 async function load() {
   loading.value = true;
-  questions.value = await api('/api/questions');
-  loading.value = false;
+  try {
+    questions.value = await api('/api/questions');
+  } catch {
+    /* 请求中断可忽略 */
+  } finally {
+    loading.value = false;
+  }
 }
 onMounted(load);
 

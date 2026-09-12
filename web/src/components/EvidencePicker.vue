@@ -18,6 +18,8 @@ onMounted(async () => {
       `/api/students/${props.studentId}/evidence-options`);
     artworks.value = data.artworks;
     allTags.value = data.tags;
+  } catch {
+    /* 请求中断可忽略 */
   } finally {
     loading.value = false;
   }

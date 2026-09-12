@@ -74,9 +74,6 @@ screenshots/
 output/
 **/output/
 
-# Explicit publication constraint
-server/
-
 # OS/editor noise
 .DS_Store
 Thumbs.db

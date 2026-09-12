@@ -25,18 +25,27 @@ const dims = computed(() => trajectory.value?.dimensions || []);
 async function loadStudent() {
   if (!studentId.value) return;
   trajectory.value = null;
-  const [t, r] = await Promise.all([
-    api<Trajectory>(`/api/students/${studentId.value}/trajectory`),
-    api<StageReport[]>(`/api/students/${studentId.value}/stage-reports`),
-  ]);
-  trajectory.value = t;
-  reports.value = r;
+  try {
+    const [t, r] = await Promise.all([
+      api<Trajectory>(`/api/students/${studentId.value}/trajectory`),
+      api<StageReport[]>(`/api/students/${studentId.value}/stage-reports`),
+    ]);
+    trajectory.value = t;
+    reports.value = r;
+  } catch {
+    /* 请求中断可忽略 */
+  }
 }
 
 onMounted(async () => {
-  students.value = await api('/api/students');
-  if (students.value.length) studentId.value = students.value[0].id;
-  loading.value = false;
+  try {
+    students.value = await api('/api/students');
+    if (students.value.length) studentId.value = students.value[0].id;
+  } catch {
+    /* 请求中断可忽略 */
+  } finally {
+    loading.value = false;
+  }
 });
 watch(studentId, loadStudent);
 </script>

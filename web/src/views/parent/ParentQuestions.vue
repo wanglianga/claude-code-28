@@ -23,12 +23,17 @@ const typeLabel = computed(() => {
 });
 
 async function load() {
-  [questions.value, students.value] = await Promise.all([
-    api('/api/questions'),
-    api('/api/students'),
-  ]);
-  if (!studentId.value && students.value.length) studentId.value = students.value[0].id;
-  loading.value = false;
+  try {
+    [questions.value, students.value] = await Promise.all([
+      api('/api/questions'),
+      api('/api/students'),
+    ]);
+    if (!studentId.value && students.value.length) studentId.value = students.value[0].id;
+  } catch {
+    /* 请求中断可忽略 */
+  } finally {
+    loading.value = false;
+  }
 }
 onMounted(load);
 

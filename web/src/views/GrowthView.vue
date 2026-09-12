@@ -12,14 +12,19 @@ const classFilter = ref('');
 const loading = ref(true);
 
 onMounted(async () => {
-  students.value = await api('/api/students');
-  const fromQuery = Number(route.query.student);
-  if (fromQuery && students.value.some((s) => s.id === fromQuery)) {
-    studentId.value = fromQuery;
-  } else if (students.value.length) {
-    studentId.value = students.value[0].id;
+  try {
+    students.value = await api('/api/students');
+    const fromQuery = Number(route.query.student);
+    if (fromQuery && students.value.some((s) => s.id === fromQuery)) {
+      studentId.value = fromQuery;
+    } else if (students.value.length) {
+      studentId.value = students.value[0].id;
+    }
+  } catch {
+    /* 请求中断可忽略 */
+  } finally {
+    loading.value = false;
   }
-  loading.value = false;
 });
 
 const classNames = computed(() => [...new Set(students.value.map((s) => s.class_name))]);

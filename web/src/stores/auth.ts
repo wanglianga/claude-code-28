@@ -52,8 +52,12 @@ export const useAuthStore = defineStore('auth', {
     },
     async loadMeta() {
       if (this.meta) return;
-      const { api } = await import('../api');
-      this.meta = await api<Meta>('/api/meta');
+      try {
+        const { api } = await import('../api');
+        this.meta = await api<Meta>('/api/meta');
+      } catch {
+        /* 元数据加载失败不阻塞导航，页面以空态兜底 */
+      }
     },
   },
 });
