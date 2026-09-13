@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { query } from '../db';
 import { authed, canTeachStudent, canViewStudent, requireRole } from '../auth';
 import { h } from '../hwrap';
-import { applyAdjustment, generatePlan, planProgress, PlanItem } from '../competition';
+import { applyAdjustment, generatePlan, planItemsWithDone, planProgress } from '../competition';
 
 export const competitionsRouter = Router();
 competitionsRouter.use(h(authed));
@@ -21,26 +21,18 @@ competitionsRouter.get('/students/:id/competitions', h(async (req: Request, res:
   const result = [];
   for (const c of comps) {
     const plan = (await query(
-      'SELECT items, ability_snapshot, created_at FROM coaching_plans WHERE competition_id=$1 ORDER BY id DESC LIMIT 1',
+      'SELECT ability_snapshot FROM coaching_plans WHERE competition_id=$1 ORDER BY id DESC LIMIT 1',
       [c.id])).rows[0];
     const adjustments = (await query(
       `SELECT a.*, u.name AS operator_name FROM plan_adjustments a
        LEFT JOIN users u ON u.id=a.created_by
        WHERE a.competition_id=$1 ORDER BY a.created_at DESC`, [c.id])).rows;
     const progress = await planProgress(c.id);
-    // 每个计划项的完成状态
-    const items: PlanItem[] = plan ? plan.items : [];
-    const doneMap: Record<number, boolean> = {};
-    for (const item of items) {
-      if (!item.lesson_id) continue;
-      const r = await query(
-        'SELECT 1 FROM reviews WHERE student_id=$1 AND lesson_id=$2 AND serves_competition=true',
-        [studentId, item.lesson_id]);
-      doneMap[item.seq] = r.rows.length > 0;
-    }
+    // 计划项逐项结算的完成状态（按 比赛×要求 关联点评）
+    const items = await planItemsWithDone(c.id);
     result.push({
       ...c,
-      items: items.map((i) => ({ ...i, done: !!doneMap[i.seq] })),
+      items,
       ability_snapshot: plan ? plan.ability_snapshot : null,
       progress,
       adjustments,

@@ -251,6 +251,8 @@ export async function initSchema(): Promise<void> {
   await pool.query(`
     ALTER TABLE reviews ADD COLUMN IF NOT EXISTS serves_competition BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE reviews ADD COLUMN IF NOT EXISTS competition_req_note TEXT NOT NULL DEFAULT '';
+    ALTER TABLE reviews ADD COLUMN IF NOT EXISTS competition_id INT REFERENCES competitions(id);
+    ALTER TABLE reviews ADD COLUMN IF NOT EXISTS plan_item_seq INT;
     ALTER TABLE lessons ADD COLUMN IF NOT EXISTS prep_focus TEXT NOT NULL DEFAULT '';
   `);
 }

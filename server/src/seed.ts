@@ -542,11 +542,11 @@ export async function seedIfEmpty(): Promise<void> {
   for (const item of comp1Items) {
     await query('UPDATE lessons SET prep_focus=$1 WHERE id=$2', [item.focus, item.lesson_id]);
   }
-  // 第11课点评标记服务比赛目标；第12课未标记 → 进度落后
+  // 第11课点评标记服务比赛目标（关联比赛与计划项1）；第12课未标记 → 进度落后
   await query(
-    `UPDATE reviews SET serves_competition=true, competition_req_note=$1
+    `UPDATE reviews SET serves_competition=true, competition_req_note=$1, competition_id=$4, plan_item_seq=1
      WHERE student_id=$2 AND lesson_id=$3`,
-    ['扣题「《家乡的桥》」：完成素材小稿2幅，确定以村口老石桥为画面主体', sid('陈小明'), bLessons[10]]);
+    ['扣题「《家乡的桥》」：完成素材小稿2幅，确定以村口老石桥为画面主体', sid('陈小明'), bLessons[10], comp1Id]);
   await query(
     `INSERT INTO events (student_id, type, title, detail, created_by, created_at) VALUES
      ($1,'competition','报名比赛并生成辅导计划','报名「童画杯」，主题《家乡的桥》，截止2026-10-17，已按当前能力标签（弱项：观察能力、构图）生成6阶段辅导计划并同步到后续课次目标。',$2,'2026-08-20 10:05')`,
@@ -567,11 +567,11 @@ export async function seedIfEmpty(): Promise<void> {
     [comp2.rows[0].id, JSON.stringify(comp2Items),
      JSON.stringify({ avgs: { composition: 3.8, line_score: 3.9, color: 3.8, observation: 3.8, creativity: 3.9, focus: 3.9 }, weak: ['色彩', '构图'] })]);
   await query(
-    `UPDATE reviews SET serves_competition=true, competition_req_note=$1 WHERE student_id=$2 AND lesson_id=$3`,
-    ['扣题「《黄昏的街道》」：完成3幅黄昏街景小稿并选定最终构图', sid('张子涵'), cLessons[6]]);
+    `UPDATE reviews SET serves_competition=true, competition_req_note=$1, competition_id=$4, plan_item_seq=1 WHERE student_id=$2 AND lesson_id=$3`,
+    ['扣题「《黄昏的街道》」：完成3幅黄昏街景小稿并选定最终构图', sid('张子涵'), cLessons[6], comp2.rows[0].id]);
   await query(
-    `UPDATE reviews SET serves_competition=true, competition_req_note=$1 WHERE student_id=$2 AND lesson_id=$3`,
-    ['完成参赛作品正稿：按四开尺寸完成《黄昏的街道》水粉正稿', sid('张子涵'), cLessons[7]]);
+    `UPDATE reviews SET serves_competition=true, competition_req_note=$1, competition_id=$4, plan_item_seq=2 WHERE student_id=$2 AND lesson_id=$3`,
+    ['完成参赛作品正稿：按四开尺寸完成《黄昏的街道》水粉正稿', sid('张子涵'), cLessons[7], comp2.rows[0].id]);
 
   console.log('种子数据初始化完成');
 }

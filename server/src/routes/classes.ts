@@ -81,22 +81,45 @@ classesRouter.post('/lessons/:lessonId/reviews', requireRole('teacher'), h(async
   }
   const { student_id, title, image_data, scores, need_home_practice,
     home_practice_note, suggestion, next_prep, class_state,
-    serves_competition, competition_req_note } = req.body || {};
+    serves_competition, competition_req_note, plan_item_seq } = req.body || {};
+  let { competition_id } = req.body || {};
   if (!student_id || !scores || !suggestion) {
     res.status(400).json({ error: '学生、六维评分与点评建议为必填项' });
     return;
   }
-  // 标记"服务比赛目标"时必须说明本节课解决了哪个比赛要求，且学生须有在辅导中的比赛
+  // 标记"服务比赛目标"时：必须说明解决了哪个比赛要求，并尽量关联到具体比赛与计划项（进度逐项结算）
   if (serves_competition) {
     if (!competition_req_note || !String(competition_req_note).trim()) {
       res.status(400).json({ error: '标记服务比赛目标时，必须说明本节课解决了作品的哪个比赛要求' });
       return;
     }
     const active = await query(
-      `SELECT 1 FROM competitions WHERE student_id=$1 AND status='active'`, [student_id]);
+      `SELECT id FROM competitions WHERE student_id=$1 AND status='active'`, [student_id]);
     if (!active.rows.length) {
       res.status(400).json({ error: '该学生没有在辅导中的比赛，不能标记服务比赛目标' });
       return;
+    }
+    if (competition_id) {
+      const own = active.rows.find((r: any) => r.id === competition_id);
+      if (!own) {
+        res.status(400).json({ error: '比赛不存在或不在辅导中' });
+        return;
+      }
+    } else if (active.rows.length === 1) {
+      competition_id = active.rows[0].id;
+    } else {
+      res.status(400).json({ error: '该学生有多个在辅导中的比赛，请指定服务哪一项比赛' });
+      return;
+    }
+    if (plan_item_seq !== undefined && plan_item_seq !== null) {
+      const plan = await query(
+        'SELECT items FROM coaching_plans WHERE competition_id=$1 ORDER BY id DESC LIMIT 1',
+        [competition_id]);
+      const items: Array<{ seq: number }> = plan.rows[0] ? plan.rows[0].items : [];
+      if (!items.some((i) => i.seq === plan_item_seq)) {
+        res.status(400).json({ error: '计划项序号不存在于该比赛的当前辅导计划中' });
+        return;
+      }
     }
   }
   for (const d of DIMENSIONS) {
@@ -135,12 +158,14 @@ classesRouter.post('/lessons/:lessonId/reviews', requireRole('teacher'), h(async
       `INSERT INTO reviews (artwork_id, student_id, lesson_id, teacher_id,
          composition, line_score, color, observation, creativity, focus,
          need_home_practice, home_practice_note, suggestion, next_prep, class_state,
-         serves_competition, competition_req_note)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
+         serves_competition, competition_req_note, competition_id, plan_item_seq)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
       [art.rows[0].id, student_id, lessonId, req.user!.id,
        scores.composition, scores.line_score, scores.color, scores.observation, scores.creativity, scores.focus,
        !!need_home_practice, home_practice_note || '', suggestion, next_prep || '', class_state || '',
-       !!serves_competition, String(competition_req_note || '').trim()]);
+       !!serves_competition, String(competition_req_note || '').trim(),
+       serves_competition ? competition_id : null,
+       serves_competition && plan_item_seq !== undefined ? plan_item_seq : null]);
     await client.query(
       `INSERT INTO attendance (student_id, lesson_id, status) VALUES ($1,$2,'present')
        ON CONFLICT (student_id, lesson_id) DO NOTHING`,

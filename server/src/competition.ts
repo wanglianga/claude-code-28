@@ -15,6 +15,12 @@ const DIM_LABEL: Record<string, string> = Object.fromEntries(
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
+/** DATE 列经 pg 返回的是 Date 对象，String(Date) 会变成 "Sat Oct 10 ..."，统一格式化为 YYYY-MM-DD */
+function dateStr(v: unknown): string {
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  return String(v).slice(0, 10);
+}
+
 /** 学生当前能力快照：近6次六维均分 + 两个最弱维度 */
 async function abilitySnapshot(studentId: number) {
   const { rows } = await query(
@@ -39,10 +45,10 @@ async function abilitySnapshot(studentId: number) {
 
 /** 由比赛信息 + 能力弱项生成辅导阶段（不分配课次） */
 function buildFocuses(
-  comp: { theme: string; deadline: string; size_requirement: string },
+  comp: { theme: string; deadline: unknown; size_requirement: string },
   weak: string[],
 ): Array<{ focus: string; requirement: string }> {
-  const deadline = String(comp.deadline).slice(0, 10);
+  const deadline = dateStr(comp.deadline);
   const size = comp.size_requirement || '按比赛要求';
   return [
     { focus: `主题构思与素材：围绕「${comp.theme}」收集素材、起2-3幅小稿`, requirement: `扣题「${comp.theme}」` },
@@ -123,35 +129,41 @@ export async function generatePlan(competitionId: number, createdBy: number | nu
     await query(
       `INSERT INTO events (student_id, type, title, detail, created_by) VALUES ($1,'competition',$2,$3,$4)`,
       [comp.student_id, `生成比赛辅导计划：${comp.name}`,
-       `主题「${comp.theme}」，截止 ${String(comp.deadline).slice(0, 10)}，共${items.length}个辅导阶段，已同步到后续课次目标。`, createdBy]);
+       `主题「${comp.theme}」，截止 ${dateStr(comp.deadline)}，共${items.length}个辅导阶段，已同步到后续课次目标。`, createdBy]);
   }
 }
 
 export interface PlanProgress {
   expected: number;   // 到今天就应完成的计划项数
-  done: number;       // 实际完成（对应课次有点评且标记服务比赛目标）
+  done: number;       // 实际完成（有点评显式关联该比赛该计划项）
   behind: boolean;
   percent: number;
 }
 
-/** 计算比赛辅导进度：应完成 vs 已完成（依据老师点评的"服务比赛目标"标记） */
-export async function planProgress(competitionId: number): Promise<PlanProgress> {
+/**
+ * 计划项逐项结算完成状态：仅当存在「该学生、该比赛、该计划项序号」且标记服务比赛目标的点评时，
+ * 该项才算达成。同一课次映射多个计划项时互不影响；在后续课次补交对应要求的点评也可结算。
+ */
+export async function planItemsWithDone(competitionId: number): Promise<Array<PlanItem & { done: boolean }>> {
   const plan = (await query(
     'SELECT items FROM coaching_plans WHERE competition_id=$1 ORDER BY id DESC LIMIT 1',
     [competitionId])).rows[0];
   const items: PlanItem[] = plan ? plan.items : [];
   const comp = (await query('SELECT student_id FROM competitions WHERE id=$1', [competitionId])).rows[0];
+  const doneRows = (await query(
+    `SELECT DISTINCT plan_item_seq FROM reviews
+     WHERE student_id=$1 AND competition_id=$2 AND serves_competition=true AND plan_item_seq IS NOT NULL`,
+    [comp.student_id, competitionId])).rows;
+  const doneSeqs = new Set(doneRows.map((r: any) => r.plan_item_seq));
+  return items.map((i) => ({ ...i, done: doneSeqs.has(i.seq) }));
+}
+
+/** 计算比赛辅导进度：应完成（按计划项课次日期）vs 已完成（逐项结算） */
+export async function planProgress(competitionId: number): Promise<PlanProgress> {
+  const items = await planItemsWithDone(competitionId);
   const today = todayStr();
-  let expected = 0;
-  let done = 0;
-  for (const item of items) {
-    if (!item.lesson_id || !item.lesson_date || item.lesson_date > today) continue;
-    expected++;
-    const r = await query(
-      `SELECT 1 FROM reviews WHERE student_id=$1 AND lesson_id=$2 AND serves_competition=true`,
-      [comp.student_id, item.lesson_id]);
-    if (r.rows.length) done++;
-  }
+  const expected = items.filter((i) => i.lesson_id && i.lesson_date && i.lesson_date <= today).length;
+  const done = items.filter((i) => i.done).length;
   const total = items.filter((i) => i.lesson_id).length || 1;
   return { expected, done, behind: expected > done, percent: Math.round((done / total) * 100) };
 }

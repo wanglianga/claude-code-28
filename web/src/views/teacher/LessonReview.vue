@@ -31,6 +31,7 @@ const classState = ref('');
 const activeComps = ref<Competition[]>([]);
 const servesComp = ref(false);
 const compReqNote = ref('');
+const selectedReq = ref<{ competition_id: number; seq: number } | null>(null);
 
 const dims = computed(() => auth.meta?.dimensions || []);
 
@@ -51,16 +52,19 @@ watch(studentId, async (sid) => {
   activeComps.value = [];
   servesComp.value = false;
   compReqNote.value = '';
+  selectedReq.value = null;
   if (!sid) return;
   try {
     const all = await api<Competition[]>(`/api/students/${sid}/competitions`);
     activeComps.value = all.filter((c) => c.status === 'active');
     // 默认勾选：若本节课是该学生比赛计划项对应的课次
     if (activeComps.value.length) {
-      const hit = activeComps.value[0].items.find((i) => i.lesson_id === lessonId && !i.done);
+      const comp = activeComps.value[0];
+      const hit = comp.items.find((i) => i.lesson_id === lessonId && !i.done);
       if (hit) {
         servesComp.value = true;
         compReqNote.value = hit.requirement;
+        selectedReq.value = { competition_id: comp.id, seq: hit.seq };
       }
     }
   } catch {
@@ -71,16 +75,24 @@ watch(studentId, async (sid) => {
 const currentStudent = computed(() =>
   lesson.value?.students.find((s: any) => s.id === studentId.value));
 
-/** 未完成计划项对应的比赛要求，供老师选择本节课解决了哪一项 */
+/** 未完成计划项对应的比赛要求，供老师选择本节课解决了哪一项（进度按比赛×要求逐项结算） */
 const reqOptions = computed(() => {
-  const out: Array<{ requirement: string; focus: string; compName: string }> = [];
+  const out: Array<{ competition_id: number; seq: number; requirement: string; focus: string; compName: string }> = [];
   for (const c of activeComps.value) {
     for (const i of c.items) {
-      if (!i.done) out.push({ requirement: i.requirement, focus: i.focus, compName: c.name });
+      if (!i.done) out.push({ competition_id: c.id, seq: i.seq, requirement: i.requirement, focus: i.focus, compName: c.name });
     }
   }
   return out;
 });
+
+function pickReq(idx: string) {
+  const o = reqOptions.value[Number(idx)];
+  if (o) {
+    selectedReq.value = { competition_id: o.competition_id, seq: o.seq };
+    compReqNote.value = o.requirement;
+  }
+}
 
 function onFile(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0];
@@ -122,12 +134,17 @@ async function submit() {
         class_state: classState.value.trim(),
         serves_competition: servesComp.value,
         competition_req_note: servesComp.value ? compReqNote.value.trim() : '',
+        competition_id: servesComp.value
+          ? (selectedReq.value?.competition_id ?? (activeComps.value.length === 1 ? activeComps.value[0].id : undefined))
+          : undefined,
+        plan_item_seq: servesComp.value ? selectedReq.value?.seq : undefined,
       },
     });
     success.value = `已保存 ${currentStudent.value?.name} 的点评`;
     title.value = ''; imageData.value = ''; imageName.value = '';
     suggestion.value = ''; nextPrep.value = ''; classState.value = ''; homeNote.value = '';
     needHome.value = false; servesComp.value = false; compReqNote.value = '';
+    selectedReq.value = null;
     scores.value = { composition: 3, line_score: 3, color: 3, observation: 3, creativity: 3, focus: 3 };
     await load();
   } catch (e: any) {
@@ -216,10 +233,10 @@ const attLabel: Record<string, string> = { present: '到课', absent: '缺勤', 
               </label>
               <div v-if="servesComp" class="mt">
                 <label class="field" style="margin-bottom:8px">
-                  <span>本节课解决了作品的哪个比赛要求 *（可从计划项选择）</span>
-                  <select class="select" :value="''" @change="(e: any) => e.target.value && (compReqNote = e.target.value)">
+                  <span>本节课解决了作品的哪个比赛要求 *（选择后进度逐项结算）</span>
+                  <select class="select" :value="''" @change="(e: any) => pickReq(e.target.value)">
                     <option value="">从辅导计划项中选择...</option>
-                    <option v-for="(o, i) in reqOptions" :key="i" :value="o.requirement">{{ o.requirement }}（{{ o.focus }}）</option>
+                    <option v-for="(o, i) in reqOptions" :key="i" :value="i">{{ o.requirement }}（{{ o.focus }}）</option>
                   </select>
                 </label>
                 <input v-model="compReqNote" class="input" placeholder="如：扣题「家乡的桥」——完成主体构图小稿" />
