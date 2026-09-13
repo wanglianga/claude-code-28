@@ -57,6 +57,8 @@ skills/
 # Claude Code local state, exported traces, and QA artifacts
 .claude/
 **/.claude/
+CLAUDE.md
+**/CLAUDE.md
 *_traces/
 **/*_traces/
 .playwright-cli/
