@@ -15,7 +15,9 @@ competitionsRouter.get('/students/:id/competitions', h(async (req: Request, res:
     return;
   }
   const comps = (await query(
-    `SELECT c.*, u.name AS created_by_name FROM competitions c
+    `SELECT c.id, c.student_id, c.name, c.theme, c.deadline::text AS deadline,
+            c.size_requirement, c.status, c.created_by, c.created_at, u.name AS created_by_name
+     FROM competitions c
      LEFT JOIN users u ON u.id = c.created_by
      WHERE c.student_id=$1 ORDER BY c.created_at DESC`, [studentId])).rows;
   const result = [];

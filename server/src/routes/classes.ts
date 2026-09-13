@@ -42,7 +42,9 @@ classesRouter.get('/:id', h(async (req: Request, res: Response) => {
             (SELECT count(*)::int FROM reviews r WHERE r.student_id=s.id) AS review_count
      FROM students s WHERE s.class_id=$1 ORDER BY s.name`, [id])).rows;
   const lessons = (await query(
-    `SELECT l.*, (SELECT count(*)::int FROM reviews r WHERE r.lesson_id=l.id) AS review_count
+    `SELECT l.id, l.class_id, l.teacher_id, l.lesson_date::text AS lesson_date,
+            l.theme, l.stage, l.seq, l.prep_focus,
+            (SELECT count(*)::int FROM reviews r WHERE r.lesson_id=l.id) AS review_count
      FROM lessons l WHERE l.class_id=$1 ORDER BY l.lesson_date DESC`, [id])).rows;
   res.json({ ...cls, students, lessons });
 }));
@@ -51,7 +53,9 @@ classesRouter.get('/:id', h(async (req: Request, res: Response) => {
 classesRouter.get('/lessons/:lessonId', h(async (req: Request, res: Response) => {
   const lessonId = parseInt(req.params.lessonId, 10);
   const lesson = (await query(
-    `SELECT l.*, c.name AS class_name, c.teacher_id AS class_teacher_id, u.name AS teacher_name
+    `SELECT l.id, l.class_id, l.teacher_id, l.lesson_date::text AS lesson_date,
+            l.theme, l.stage, l.seq, l.prep_focus,
+            c.name AS class_name, c.teacher_id AS class_teacher_id, u.name AS teacher_name
      FROM lessons l JOIN classes c ON c.id=l.class_id LEFT JOIN users u ON u.id=l.teacher_id
      WHERE l.id=$1`, [lessonId])).rows[0];
   if (!lesson) { res.status(404).json({ error: '课程不存在' }); return; }

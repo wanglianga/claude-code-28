@@ -13,13 +13,21 @@ const DIM_LABEL: Record<string, string> = Object.fromEntries(
   DIMENSIONS.map((d) => [d.key, d.label]),
 );
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
-
-/** DATE 列经 pg 返回的是 Date 对象，String(Date) 会变成 "Sat Oct 10 ..."，统一格式化为 YYYY-MM-DD */
+/**
+ * 由 DATE 原值或本地年月日生成 YYYY-MM-DD，不经过 UTC：
+ * pg 将 DATE 列解析为本地零点，若再 toISOString()（UTC），在 UTC+N 时区会串成前一天。
+ */
 function dateStr(v: unknown): string {
-  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (v instanceof Date) {
+    const y = v.getFullYear();
+    const m = String(v.getMonth() + 1).padStart(2, '0');
+    const d = String(v.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
   return String(v).slice(0, 10);
 }
+
+const todayStr = () => dateStr(new Date());
 
 /** 学生当前能力快照：近6次六维均分 + 两个最弱维度 */
 async function abilitySnapshot(studentId: number) {
